@@ -183,6 +183,9 @@ services:
     ports:
       - "${SPLUNK_BIND_ADDRESS:-127.0.0.1}:${SPLUNK_WEB_PORT:-8000}:8000"
       - "${SPLUNK_BIND_ADDRESS:-127.0.0.1}:${SPLUNK_API_PORT:-8089}:8089"
+      # Syslog uses a separate bind address; set it to 0.0.0.0 for LAN senders.
+      - "${SPLUNK_SYSLOG_BIND_ADDRESS:-127.0.0.1}:${SPLUNK_SYSLOG_PORT:-5514}:5514/tcp"
+      - "${SPLUNK_SYSLOG_BIND_ADDRESS:-127.0.0.1}:${SPLUNK_SYSLOG_PORT:-5514}:5514/udp"
     volumes:
       - splunk_etc:/opt/splunk/etc
       - splunk_var:/opt/splunk/var

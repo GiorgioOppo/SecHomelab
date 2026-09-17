@@ -94,10 +94,66 @@ and use `SPLUNK_PASSWORD` from `.env`. The management API is available at
 Ports can be configured through `SPLUNK_WEB_PORT` and `SPLUNK_API_PORT`;
 `SPLUNK_BIND_ADDRESS` controls Splunk's bind address separately.
 MISP and Splunk share the Compose network. Indicator integration is described
-in the next section.
+below.
 
 The flags acknowledge the terms; they do not install a commercial license.
 Licensing remains managed by Splunk Enterprise.
+
+## Syslog ingestion
+
+Splunk can receive syslog over raw TCP and UDP on port **5514** and store
+the events in the **`syslog`** index with `sourcetype=syslog`.
+With Splunk running, configure the listeners from the repository directory:
+
+```sh
+python3 syslog_setup.py
+```
+
+The script creates the index with a 30-day retention period and a 2048 MB
+size limit; older data is removed when either limit is reached. If the index
+already exists, its retention settings are preserved. Input configuration
+and indexed events persist in the existing Splunk volumes.
+
+To receive logs from devices on your LAN, set these values in `.env`:
+
+```dotenv
+SPLUNK_SYSLOG_BIND_ADDRESS=0.0.0.0
+SPLUNK_SYSLOG_PORT=5514
+```
+
+The default bind address is `127.0.0.1`, which accepts local connections only.
+`SPLUNK_SYSLOG_PORT` changes the published host port for both protocols;
+the listeners inside the container always use port 5514. Apply the port
+mappings and wait for Splunk to become `healthy`:
+
+```sh
+podman compose up -d --no-deps splunk
+podman compose ps splunk
+```
+
+On each sending device, select TCP or UDP syslog and use the **Mac's LAN IP
+address** and the published port, not the container or VM address. These
+listeners use plain TCP/UDP without TLS. Splunk Web and the management API
+retain their separate loopback bindings. The Mac and Podman VM must remain
+running to receive logs.
+
+Search incoming events in Splunk:
+
+```spl
+index=syslog sourcetype=syslog
+| table _time host source _raw
+```
+
+The input uses `connection_host=ip`, but Podman's forwarding can replace the
+network peer IP. Splunk's built-in syslog parsing can then set `host` from
+the hostname in the message. Do not treat `host` as a verified sender IP.
+A successful test from the Mac confirms local ingestion; delivery from
+another device also depends on the LAN path and the Mac's firewall.
+
+See the official [Splunk input API reference](https://help.splunk.com/en/splunk-enterprise/rest-api-reference/10.4/input-endpoints/input-endpoint-descriptions),
+[syslog host parsing example](https://help.splunk.com/en/splunk-enterprise/get-data-in/get-started-with-getting-data-in/9.3/configure-source-types/override-source-types-on-a-per-event-basis),
+and [Podman port publishing reference](https://docs.podman.io/en/latest/markdown/podman-run.1.html#publish-p-hostip-hostport-containerport-protocol)
+for listener settings and forwarding behavior.
 
 ## MISP indicators in Splunk
 
