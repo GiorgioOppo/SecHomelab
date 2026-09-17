@@ -1,0 +1,10 @@
+.env
+.env.*
+.env-*
+!.env.example
+ssl/
+__pycache__/
+*.py[cod]
+.DS_Store
+*.log
+.sync-state/
