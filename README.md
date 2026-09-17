@@ -1,36 +1,37 @@
 # SecHomelab
 
-MISP e Splunk con Podman Compose.
+MISP and Splunk with Podman Compose.
 
-Stack per una nuova installazione locale: MISP core, Nginx, MISP modules,
-MariaDB, Valkey (compatibile Redis), relay SMTP e Splunk Enterprise standalone.
-La configurazione MISP segue
-la [nuova architettura ufficiale con Nginx separato](https://github.com/MISP/misp-docker#breaking-changes).
-I dati sono conservati in volumi nominati; MISP usa HTTPS 8443, Splunk Web
-la porta 8000 e l'API Splunk la porta 8089, tutte su loopback per impostazione predefinita.
+A stack for a new local installation: MISP core, Nginx, MISP modules,
+MariaDB, Valkey (Redis-compatible), an SMTP relay, and standalone Splunk Enterprise.
+The MISP configuration follows the
+[official architecture with a separate Nginx container](https://github.com/MISP/misp-docker#breaking-changes).
+Data is stored in named volumes. MISP uses HTTPS on port 8443, Splunk Web
+uses port 8000, and the Splunk API uses port 8089. All published ports bind
+to loopback by default.
 
-## Avvio
+## Getting started
 
-Servono Podman 4.9 o successivo, un provider Compose (ad esempio
-`podman-compose`), Python 3 e OpenSSL con supporto `-addext`.
-Su macOS/Windows deve essere attiva una Podman machine. Verificare prima
-`podman info` e `podman compose version`.
+Requirements: Podman 4.9 or later, a Compose provider such as
+`podman-compose`, Python 3, and OpenSSL with `-addext` support.
+On macOS and Windows, a Podman machine must be running. Check
+`podman info` and `podman compose version` first.
 
-Su un Mac senza una VM utilizzabile, crearne una dedicata (una sola volta):
+On a Mac without a usable VM, create a dedicated one once:
 
 ```sh
 podman machine init --cpus 4 --memory 8192 --disk-size 40 --rootful=false --update-connection misp-machine
 podman machine start misp-machine
 ```
 
-Se `misp-machine` esiste già, basta `podman machine start misp-machine`.
-Per selezionarla nuovamente: `podman system connection default misp-machine`.
-L'errore `failed to read identity .../machine` indica una chiave SSH mancante
-della VM, non un problema del Compose. Prima di rimuovere una vecchia VM,
-controllare `podman machine list` e conservare eventuali dischi e dati.
+If `misp-machine` already exists, run `podman machine start misp-machine`.
+To select it again, run `podman system connection default misp-machine`.
+The error `failed to read identity .../machine` indicates a missing VM SSH key,
+rather than a Compose issue. Before removing an old VM, check
+`podman machine list` and preserve any disks and data.
 
-Dalla cartella che contiene questo README, dopo aver configurato i termini
-Splunk come indicato nella sezione seguente:
+From the directory containing this README, configure the Splunk terms
+as described in the next section, then start the stack:
 
 ```sh
 python3 init.py
@@ -40,45 +41,45 @@ podman compose ps
 podman compose logs -f misp-core
 ```
 
-L'inizializzazione del database e di MISP può richiedere alcuni minuti.
-Aprire [https://localhost:8443](https://localhost:8443), accettando il
-certificato autofirmato per questo ambiente locale. Utente iniziale:
-`admin@localhost.test`; password: valore `ADMIN_PASSWORD` nel file `.env`.
+Database and MISP initialization may take a few minutes.
+Open [https://localhost:8443](https://localhost:8443) and accept the
+self-signed certificate for this local environment. The initial username is
+`admin@localhost.test`; the password is the `ADMIN_PASSWORD` value in `.env`.
 
-`init.py` crea `.env` da `.env.example` con segreti casuali e permessi 0600.
-Crea inoltre un certificato valido per localhost e gli indirizzi di loopback.
-Conserva credenziali e certificati già presenti, aggiungendo soltanto la
-password Splunk se assente o vuota. Se si copia a mano
-`.env.example` in `.env`, occorre compilare tutti i segreti vuoti manualmente.
-Per le password database usare valori alfanumerici, come quelli generati.
+`init.py` creates `.env` from `.env.example` with random secrets and mode 0600.
+It also creates a certificate valid for localhost and the loopback addresses.
+Existing credentials and certificates are preserved; only a missing or empty
+Splunk password is generated. If you manually copy `.env.example` to `.env`,
+you must fill in every empty secret yourself. Use alphanumeric database
+passwords, as the script does.
 
 ## Splunk Enterprise
 
-Il servizio `splunk` usa l'[immagine ufficiale](https://hub.docker.com/r/splunk/splunk)
-versione `10.4.3`
-e conserva configurazione e indici nei volumi `splunk_etc` e `splunk_var`.
-L'immagine è `linux/amd64`: sul Mac ARM64 usa l'emulazione QEMU già presente
-nella VM `misp-machine`, con modello `Haswell-v4`. Il modello predefinito
-di QEMU non supera il controllo CPU di Splunk ai riavvii; il modello
-configurato supera il precheck mantenendo attivi tutti i controlli.
-`SPLUNK_ANSIBLE_ENV` preserva CPU e bundle TLS anche durante il cambio
-utente eseguito dal provisioning del container.
-Questa configurazione è destinata al laboratorio
-locale; l'avvio emulato può richiedere diversi minuti.
+The `splunk` service uses version `10.4.3` of the
+[official image](https://hub.docker.com/r/splunk/splunk)
+and stores its configuration and indexes in the `splunk_etc` and `splunk_var` volumes.
+The image targets `linux/amd64`. On the reference ARM64 Mac, it runs through
+QEMU emulation in the `misp-machine` VM using the `Haswell-v4` CPU model.
+The default QEMU CPU model fails Splunk's CPU check on subsequent starts;
+the configured model passes the precheck with all checks still enabled.
+`SPLUNK_ANSIBLE_ENV` preserves the CPU and TLS bundle settings when container
+provisioning switches users. This configuration is intended for a local lab;
+startup under emulation may take several minutes.
 
-Prima dell'avvio occorre leggere e accettare i
-[termini Splunk](https://www.splunk.com/en_us/legal/splunk-general-terms.html).
-La [documentazione del container](https://github.com/splunk/docker-splunk/blob/develop/docs/ADVANCED.md)
-richiede esplicitamente entrambi i flag. Solo dopo l'accettazione, impostare in `.env`:
+Before starting Splunk, read and accept the
+[Splunk terms](https://www.splunk.com/en_us/legal/splunk-general-terms.html).
+The [container documentation](https://github.com/splunk/docker-splunk/blob/develop/docs/ADVANCED.md)
+explicitly requires both flags. Run `python3 init.py` to create `.env` if needed,
+then set the following values only after accepting the terms:
 
 ```dotenv
 SPLUNK_START_ARGS=--accept-license
 SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com
 ```
 
-`init.py` genera `SPLUNK_PASSWORD` anche per un `.env` esistente, senza
-impostare automaticamente i flag di accettazione. Per aggiungere solo Splunk
-allo stack MISP già in esecuzione:
+`init.py` generates `SPLUNK_PASSWORD` even when `.env` already exists,
+without automatically setting the acceptance flags. To add only Splunk
+to an existing MISP stack:
 
 ```sh
 python3 init.py
@@ -87,262 +88,263 @@ podman compose up -d splunk
 podman compose logs -f splunk
 ```
 
-Accesso: [http://localhost:8000](http://localhost:8000), utente `admin`,
-password `SPLUNK_PASSWORD` in `.env`. L'API di gestione è su
-`https://localhost:8089` con il certificato generato da Splunk.
-Le porte sono configurabili tramite `SPLUNK_WEB_PORT` e `SPLUNK_API_PORT`;
-`SPLUNK_BIND_ADDRESS` controlla separatamente l'esposizione di Splunk.
-MISP e Splunk condividono la rete Compose. Il collegamento degli indicatori
-è descritto nella sezione seguente.
+Open [http://localhost:8000](http://localhost:8000), sign in as `admin`,
+and use `SPLUNK_PASSWORD` from `.env`. The management API is available at
+`https://localhost:8089` with Splunk's generated certificate.
+Ports can be configured through `SPLUNK_WEB_PORT` and `SPLUNK_API_PORT`;
+`SPLUNK_BIND_ADDRESS` controls Splunk's bind address separately.
+MISP and Splunk share the Compose network. Indicator integration is described
+in the next section.
 
-I flag indicano l'accettazione dei termini; non installano una licenza
-commerciale. La gestione della licenza resta quella di Splunk Enterprise.
+The flags acknowledge the terms; they do not install a commercial license.
+Licensing remains managed by Splunk Enterprise.
 
-## Indicatori MISP in Splunk
+## MISP indicators in Splunk
 
-L'integrazione usa **MISP42 6.0.0**. Installare manualmente
-l'[app MISP42](https://splunkbase.splunk.com/app/4335) in Splunk e, con MISP e
-Splunk avviati, eseguire dalla cartella del repository:
+The integration uses **MISP42 6.0.0**. Manually install the
+[MISP42 app](https://splunkbase.splunk.com/app/4335) in Splunk, then run the
+following command from the repository directory with both MISP and Splunk running:
 
 ```sh
 python3 splunk_setup.py
 ```
 
-Il setup crea l'istanza `local_misp` con URL interno
-`https://misp-nginx:8443`, l'account di sola lettura e i report descritti sotto.
-L'app aggiunge comandi di ricerca per consultare gli attributi MISP da Splunk.
-Gli script inclusi richiedono il nome di progetto `misp` e le porte predefinite
-8443 e 8089; modificare soltanto il Compose non aggiorna questi riferimenti.
+Setup creates the `local_misp` instance using the internal URL
+`https://misp-nginx:8443`, a read-only account, and the reports listed below.
+The app adds search commands for querying MISP attributes from Splunk.
+The included scripts require the project name `misp` and the default ports
+8443 and 8089. Changing Compose alone does not update these references.
 
-Nel laboratorio di riferimento, aggiornamento e collaudo del 17 settembre 2026: **20.000 attributi** verificati e
-**18.556 IP distinti** nel lookup, con 10.000 IP per ciascuna fonte
-AbuseIPDB e GreyNoise. La lettura del file salvato e la correlazione di un
-IP noto tramite `lookup` sono state verificate con ricerche indipendenti.
-Questi dati, gli account e gli ID locali non sono inclusi nel repository: una
-nuova installazione deve configurare le integrazioni e importare le proprie fonti.
+The reference lab was updated and validated on September 17, 2026:
+**20,000 attributes** were verified and grouped into **18,556 distinct IPs**,
+with 10,000 IPs from each source, AbuseIPDB and GreyNoise. Independent searches
+verified the saved lookup and a lookup match for a known IP.
+These data, accounts, and local IDs are not included in the repository.
+A new installation must configure its integrations and import its own sources.
 
-Dopo il setup, nell'app sono disponibili tre report manuali, accessibili al ruolo `admin`:
+After setup, the app provides three manually run reports accessible to the
+`admin` role. Their names match those created by the setup script:
 
-- `MISP locale - Indicatori IP in tempo reale`: consulta direttamente MISP.
-- `MISP locale - Lookup IP`: mostra la tabella locale verificata.
-- `MISP locale - IP per fonte`: raggruppa gli IP per provenienza.
+- `MISP locale - Indicatori IP in tempo reale`: queries MISP directly.
+- `MISP locale - Lookup IP`: displays the verified local lookup.
+- `MISP locale - IP per fonte`: groups IPs by source.
 
-L'account MISP dedicato `splunk@localhost.test` appartiene all'organizzazione
-locale e ha accesso API di sola lettura. La chiave è conservata in `.env`
-come `MISP_SPLUNK_API_KEY` e cifrata nell'archivio credenziali di Splunk.
-Il collegamento verifica il certificato MISP: il certificato locale include
-il nome `misp-nginx`, mentre `SSL_CERT_FILE` punta a un bundle persistente
-che contiene sia le CA pubbliche sia il certificato MISP.
+The dedicated MISP account, `splunk@localhost.test`, belongs to the local
+organization and has read-only API access. Its key is stored in `.env` as
+`MISP_SPLUNK_API_KEY` and encrypted in Splunk's credential store.
+The connection verifies MISP's certificate. The local certificate includes
+`misp-nginx`, and `SSL_CERT_FILE` points to a persistent bundle containing
+both public CAs and the MISP certificate.
 
-Nel laboratorio di riferimento, un'automazione Codex richiama il ciclo ogni
-5 minuti: **fonti esterne ogni 24 ore, lookup Splunk ogni 5 minuti**.
-L'automazione è esterna al repository e non viene creata dal clone o dal Compose.
-Per riprodurre questa pianificazione, creare nella propria installazione Codex
-un'automazione che esegua ogni 5 minuti, dalla cartella del repository:
+In the reference lab, a Codex automation invokes the cycle every 5 minutes:
+**external sources refresh every 24 hours, and the Splunk lookup refreshes every 5 minutes**.
+This automation is external to the repository; cloning the repository or
+starting Compose does not create it. To reproduce the schedule, create an
+automation in your own Codex installation that runs the following command
+every 5 minutes from the repository directory:
 
 ```sh
 python3 intel_sync.py
 ```
 
-Lo stesso comando esegue un singolo ciclo manuale; non avvia uno scheduler.
-Lo script usa `fcntl` e richiede un host macOS o Linux.
+The same command can run a single cycle manually; it does not start a scheduler.
+The script uses `fcntl` and requires a macOS or Linux host.
 
-`intel_sync.py` aggiorna prima AbuseIPDB e GreyNoise, se scaduti, poi sincronizza
-Splunk. Registra separatamente l'ultimo successo di ogni fase in
-`.sync-state/state.json` (permessi 0600), salva il tentativo prima di contattare
-una fonte e impedisce che due cicli si sovrappongano. Una fonte non disponibile
-non blocca le altre fasi; viene riprovata dopo 6 ore. Splunk viene riprovato al
-ciclo successivo. Un file di stato non valido arresta il ciclo senza riscaricare
-le fonti. Non cancellare lo stato per forzare aggiornamenti, perché protegge
-anche le quote API. Gli script dei singoli passaggi restano disponibili per la
-diagnostica, ma per l'uso ordinario usare sempre `intel_sync.py`.
+`intel_sync.py` first updates AbuseIPDB and GreyNoise when due, then synchronizes
+Splunk. It records each stage's last successful run separately in
+`.sync-state/state.json` with mode 0600, records an attempt before contacting
+a source, and prevents overlapping cycles. An unavailable source does not block
+the other stages and is retried after 6 hours. Splunk is retried on the next
+cycle. Invalid state stops the cycle without downloading the sources again.
+Do not delete the state to force an update: it also protects API quotas.
+The individual stage scripts remain available for troubleshooting, but use
+`intel_sync.py` for normal operation.
 
-La cadenza è periodica, non una notifica istantanea di ogni modifica: un'importazione
-lunga, un servizio in avvio o il Mac sospeso possono ritardare il ciclo. Servono
-il Mac acceso, Codex in esecuzione e la VM Podman con MISP e Splunk avviati.
-La pianificazione si gestisce nella sezione delle automazioni di Codex e non è
-un servizio incluso nel Compose. Vedere la
-[documentazione ufficiale sulle attività pianificate](https://learn.chatgpt.com/docs/automations?surface=app).
+Updates are periodic rather than instantaneous. A long import, a service still
+starting, or a sleeping Mac can delay a cycle. Keep the Mac on, Codex running,
+and the Podman VM running with MISP and Splunk started. Manage the schedule
+in Codex's automations section; it is not a Compose service. See the
+[official scheduled tasks documentation](https://learn.chatgpt.com/docs/automations?surface=app).
 
-Per eseguire soltanto la sincronizzazione MISP → Splunk durante la diagnostica,
-quando nessun ciclo automatico è attivo, dalla cartella del repository:
+To run only the MISP → Splunk synchronization while troubleshooting,
+ensure no automatic cycle is active, then run this command from the repository directory:
 
 ```sh
 python3 splunk_sync.py
 ```
 
-Lo script interroga MISP e MISP42, confronta tutti gli UUID e i valori IP e
-scrive `misp_ip_intel.csv` soltanto se i risultati coincidono. Un risultato
-vuoto, parziale o non valido interrompe l'aggiornamento. Il lookup raggruppa
-gli IP duplicati mantenendo gli eventi di origine, le fonti e gli UUID.
-Comprende `ip-src` e `ip-dst`, anche con `to_ids=false` e in eventi non
-pubblicati accessibili all'account dedicato. Gli IP marcati come eliminati
-vengono esclusi dalla nuova tabella.
+The script queries MISP and MISP42, compares all UUIDs and IP values, and
+writes `misp_ip_intel.csv` only when the results match. Empty, partial, or
+invalid results stop the update. The lookup groups duplicate IPs while
+preserving their source events, sources, and UUIDs.
+It includes `ip-src` and `ip-dst`, including attributes with `to_ids=false`
+and unpublished events accessible to the dedicated account. Attributes marked
+as deleted are excluded from the new lookup.
 
-Per consultare il lookup aggiornato nell'app MISP42:
+To view the updated lookup in the MISP42 app:
 
 ```spl
 | inputlookup misp_ip_intel.csv
 | table ip misp_sources misp_event_ids misp_attribute_count
 ```
 
-Esempio di correlazione con log che contengono un campo `src_ip`:
+Example correlation with logs containing a `src_ip` field:
 
 ```spl
-index=IL_TUO_INDICE
+index=YOUR_INDEX
 | lookup misp_ip_intel.csv ip AS src_ip OUTPUT misp_sources misp_event_ids
 | where isnotnull(misp_event_ids)
 ```
 
-La ricerca va eseguita nel contesto dell'app MISP42. Il nome dell'indice e
-il campo IP dipendono dai log da analizzare. La tabella non è un indice di
-eventi Splunk: gli attributi completi restano consultabili tramite il comando
-`mispgetioc` e i report salvati nell'app.
+Run the search in the MISP42 app context. The index name and IP field depend
+on the logs being analyzed. This lookup is not a Splunk event index;
+full attributes remain available through the `mispgetioc` command and the
+app's saved reports.
 
-`python3 splunk_setup.py` ripristina la configurazione dell'account e
-dell'istanza usando la stessa chiave, senza ruotarla. Richiede MISP42 già
-installato e i due servizi avviati. Dopo una modifica al Compose applicare
-`podman compose up -d --no-deps splunk` e attendere lo stato `healthy` prima
-di eseguire la sincronizzazione. Dopo il rinnovo del certificato MISP,
-rieseguire il setup per aggiornare anche la copia fidata in Splunk.
+`python3 splunk_setup.py` restores the account and instance configuration
+using the same key, without rotating it. MISP42 must already be installed,
+and both services must be running. After changing Compose, apply
+`podman compose up -d --no-deps splunk` and wait for the `healthy` status
+before synchronizing. After renewing the MISP certificate, run setup again
+to update the trusted copy in Splunk.
 
-## Configurazione
+## Configuration
 
-- Per accesso dalla LAN, impostare `BIND_ADDRESS=0.0.0.0` e
-  `BASE_URL=https://nome-del-server:8443` in `.env`, e sostituire il
-  certificato con uno valido per quel nome. `HTTPS_PORT` e la porta in
-  `BASE_URL` devono coincidere. Ricreare i container con `podman compose up -d`.
-- Il relay SMTP è interno. Configurare `SMARTHOST_*` e `MISP_EMAIL` per
-  l'invio tramite il proprio server email. Senza smarthost il relay tenta
-  la consegna diretta, che dipende dalla rete e dalla configurazione DNS.
-- Per un deployment stabile, sostituire `latest` con tag verificati delle
-  [immagini ufficiali](https://github.com/orgs/MISP/packages). Core e Nginx
-  usano lo stesso `CORE_RUNNING_TAG` e devono appartenere alla nuova
-  architettura. Non usare tag precedenti alla separazione di Nginx.
-- Non cambiare le password database soltanto in `.env` dopo il primo
-  avvio: MariaDB mantiene gli utenti già inizializzati nel volume.
-  Conservare anche `ENCRYPTION_KEY` e `GPG_PASSPHRASE` insieme ai backup.
+- For LAN access, set `BIND_ADDRESS=0.0.0.0` and
+  `BASE_URL=https://server-name:8443` in `.env`, and replace the certificate
+  with one valid for that hostname. `HTTPS_PORT` must match the port in
+  `BASE_URL`. Recreate the containers with `podman compose up -d`.
+- The SMTP relay is internal. Configure `SMARTHOST_*` and `MISP_EMAIL`
+  to send through your own mail server. Without a smarthost, the relay attempts
+  direct delivery, which depends on the network and DNS configuration.
+- For a stable deployment, replace `latest` with verified tags from the
+  [official images](https://github.com/orgs/MISP/packages). Core and Nginx
+  share `CORE_RUNNING_TAG` and must use the architecture with separate Nginx.
+  Do not use tags from before the Nginx split.
+- Do not change database passwords only in `.env` after the first startup:
+  MariaDB retains the initialized users in its volume. Keep `ENCRYPTION_KEY`
+  and `GPG_PASSPHRASE` with your backups as well.
 
-La cartella `ssl` ha permessi 0700 sull'host. I file TLS al suo interno
-sono leggibili dall'utente Nginx nel container perché montati singolarmente.
-Mantenere privata la cartella anche sostituendo il certificato e la chiave.
-Con certificati forniti manualmente, impostare i permessi prima dell'avvio:
+The `ssl` directory has mode 0700 on the host. Its TLS files are readable
+by the container's Nginx user because they are mounted individually.
+Keep the directory private when replacing the certificate and key.
+For certificates supplied manually, set permissions before starting:
 
 ```sh
 chmod 700 ssl
 chmod 644 ssl/cert.pem ssl/key.pem
 ```
 
-Una chiave con permessi 0600 appartenente all'utente host non è leggibile
-dal processo Nginx UID 101. Il mount dei singoli file permette di mantenere
-la cartella privata sull'host senza bloccare l'accesso dentro il container.
-I bind mount TLS includono le etichette SELinux `:Z`; i volumi nominati
-sono gestiti da Podman. Non è richiesto `privileged`. I tmpfs di Nginx usano
-permessi 1777 per consentire la scrittura all'UID 101 anche tramite il
-provider Docker Compose, che non accetta `uid`/`gid` nei mount tmpfs Podman.
+A key with mode 0600 owned by the host user cannot be read by Nginx running
+as UID 101. Mounting individual files keeps the host directory private while
+allowing access inside the container. TLS bind mounts include the SELinux
+`:Z` label; Podman manages the named volumes. `privileged` is not required.
+Nginx tmpfs mounts use mode 1777 to allow UID 101 to write when using the
+Docker Compose provider, which does not accept `uid`/`gid` options for
+Podman tmpfs mounts.
 
-## Arresto e dati
+## Stopping the stack and preserving data
 
 ```sh
 podman compose down
 ```
 
-Questo comando conserva i volumi. L'opzione `down -v` li elimina, inclusi
-database, allegati, configurazione, log, chiavi GPG e indici Splunk. Prima degli aggiornamenti
-salvare database, volumi persistenti, `.env` e certificati.
+This command preserves volumes. The `down -v` option deletes them, including
+the database, attachments, configuration, logs, GPG keys, and Splunk indexes.
+Before upgrading, back up the database, persistent volumes, `.env`, and certificates.
 
-## Blacklist AbuseIPDB
+## AbuseIPDB blacklist
 
-`abuseipdb_sync.py` aggiorna un feed esistente: non crea il feed iniziale.
-Prima di usare il ciclo completo, configurare in MISP un feed con nome
-`AbuseIPDB blacklist (confidence 100)`, provider `AbuseIPDB` e URL
+`abuseipdb_sync.py` refreshes an existing feed; it does not create the initial feed.
+Before using the complete cycle, configure a MISP feed named
+`AbuseIPDB blacklist (confidence 100)`, with provider `AbuseIPDB` and URL
 `https://api.abuseipdb.com/api/v2/blacklist?confidenceMinimum=100&limit=10000&plaintext`.
-Il formato deve essere `freetext`, la sorgente `network`, con evento fisso,
-`delta_merge` e `override_ids` abilitati, pubblicazione disabilitata e
-distribuzione limitata alla propria organizzazione. Gli header devono essere
-`Key: <valore di ABUSEIPDB_API_KEY>` e `Accept: text/plain`, su due righe.
-Eseguire una prima importazione per associare un evento privato non pubblicato,
-quindi disabilitare il feed. La chiave deve essere valorizzata anche in `.env`.
+Use the `freetext` format and `network` source, a fixed event,
+`delta_merge` and `override_ids` enabled, publishing disabled, and distribution
+restricted to your organization. Set the headers to
+`Key: <ABUSEIPDB_API_KEY value>` and `Accept: text/plain` on separate lines.
+Run an initial import to associate a private, unpublished event, then disable
+the feed. The API key must also be set in `.env`.
 
-Nel laboratorio di riferimento, il 17 settembre 2026 sono stati importati
-10.000 IP con `confidenceMinimum=100` e `limit=10000`. Gli ID seguenti sono
-esempi locali e saranno diversi in una nuova installazione:
+In the reference lab, 10,000 IPs were imported on September 17, 2026,
+using `confidenceMinimum=100` and `limit=10000`. The following IDs are local
+examples and will differ in a new installation:
 
-- [Evento 1](https://localhost:8443/events/view/1): 10.000 attributi `ip-dst`,
-  evento visibile solo all'organizzazione locale e non pubblicato.
+- [Event 1](https://localhost:8443/events/view/1): 10,000 `ip-dst` attributes,
+  visible only to the local organization and unpublished.
 - [Feed 3](https://localhost:8443/feeds/view/3): `AbuseIPDB blacklist (confidence 100)`.
-  Il feed è disabilitato tra le importazioni; `intel_sync.py` lo aggiorna ogni 24 ore.
-- `to_ids=false`: gli attributi sono disponibili per analisi e correlazioni.
+  The feed is disabled between imports; `intel_sync.py` refreshes it every 24 hours.
+- `to_ids=false`: attributes remain available for analysis and correlation.
 
-La chiave personale è nel file `.env` (`ABUSEIPDB_API_KEY`) e nell'header
-di autenticazione del feed MISP. Cambiarla in `.env` da solo non modifica
-la configurazione del feed già salvata in MISP.
+The personal API key is stored in `.env` as `ABUSEIPDB_API_KEY` and in the
+MISP feed's authentication header. Changing `.env` alone does not update
+the feed configuration already saved in MISP.
 
-Per un intervento manuale dalla UI, abilitare il feed nella lista **Feeds**, avviarne
-il prelievo e attendere il completamento del job prima di disabilitarlo.
-Il feed riusa lo stesso evento, deduplica gli IP e, con `delta_merge`,
-elimina logicamente gli indicatori non più presenti nella nuova lista.
+To refresh manually through the UI, enable the feed in the **Feeds** list,
+start fetching it, and wait for the job to finish before disabling it.
+The feed reuses the same event, deduplicates IPs, and uses `delta_merge`
+to soft-delete indicators no longer present in the new list.
 
-Fonte: [API blacklist AbuseIPDB](https://docs.abuseipdb.com/#blacklist-endpoint).
+Source: [AbuseIPDB blacklist API](https://docs.abuseipdb.com/#blacklist-endpoint).
 
 ## GreyNoise
 
-Nel laboratorio di riferimento, il 17 settembre 2026 sono stati importati
-**10.000 IP malevoli** tramite GNQL, con la query
-`last_seen:1d classification:malicious`. Gli ID seguenti sono esempi locali:
+In the reference lab, **10,000 malicious IPs** were imported on September 17, 2026,
+using GNQL with the query `last_seen:1d classification:malicious`.
+The following IDs are local examples:
 
-- [Evento 2](https://localhost:8443/events/view/2): attributi `ip-dst`,
-  visibilità limitata all'organizzazione locale, non pubblicato, `to_ids=false`.
+- [Event 2](https://localhost:8443/events/view/2): `ip-dst` attributes,
+  visible only to the local organization, unpublished, with `to_ids=false`.
 - [Feed 4](https://localhost:8443/feeds/view/4):
   `GreyNoise malicious IPs (last 24h, max 10000)`.
-- La ricerca iniziale aveva 122.909 risultati: l'importazione è limitata
-  ai primi 10.000 restituiti dal provider, non all'intera lista.
+- The initial query matched 122,909 results. The import is limited to the
+  first 10,000 returned by the provider, not the full list.
 
-Per scaricare una nuova lista e aggiornare lo stesso evento, dalla cartella del repository:
+To download a new list and update the same event, run this command
+from the repository directory:
 
 ```sh
 python3 greynoise_sync.py
 ```
 
-Lo script legge `GREYNOISE_API_KEY` da `.env`, controlla che GreyNoise abbia
-applicato tutti i filtri e accetta soltanto IP pubblici classificati `malicious`.
-La query seleziona gli IP attualmente classificati malevoli e osservati nelle
-ultime 24 ore; il filtro distinto `last_seen_malicious` non è incluso nei
-permessi verificati della chiave. Una lista vuota, non valida o una richiesta
-fallita conserva la lista precedente.
+The script reads `GREYNOISE_API_KEY` from `.env`, checks that GreyNoise applied
+all filters, and accepts only public IPs classified as `malicious`.
+The query selects IPs currently classified as malicious and observed within
+the last 24 hours. The separate `last_seen_malicious` filter was not included
+in the verified key's permissions. An empty or invalid list, or a failed request,
+leaves the previous list intact.
 
-Il feed nativo `freetext` legge
-`/var/www/MISP/app/files/feeds/greynoise-malicious.txt` dal volume persistente
-`misp_files`. Lo script sostituisce il file atomicamente, importa con
-`delta_merge` e disabilita il feed al termine. `intel_sync.py` esegue questo
-passaggio ogni 24 ore. Gli IP assenti dalla nuova lista vengono eliminati logicamente
-dall'evento. Il prelievo dalla sola UI MISP rilegge il file già presente:
-per contattare GreyNoise e scaricare dati nuovi usare lo script.
+The native `freetext` feed reads
+`/var/www/MISP/app/files/feeds/greynoise-malicious.txt` from the persistent
+`misp_files` volume. The script replaces the file atomically, imports using
+`delta_merge`, and disables the feed when finished. `intel_sync.py` runs this
+stage every 24 hours. IPs missing from the new list are soft-deleted from
+the event. Fetching through the MISP UI alone rereads the existing file;
+use the script to contact GreyNoise and download fresh data.
 
-Nel laboratorio di riferimento, anche **GreyNoise Lookup 2.0** è configurato
-e abilitato per l'arricchimento
-degli attributi IPv4 `ip-src` e `ip-dst`. Un test sul servizio `misp-modules`
-ha restituito un oggetto `greynoise-ip`. Aprire un attributo e scegliere
-l'arricchimento GreyNoise; le interrogazioni CVE dipendono dai permessi del piano.
+In the reference lab, **GreyNoise Lookup 2.0** is also configured and enabled
+for enriching IPv4 `ip-src` and `ip-dst` attributes. A test against the
+`misp-modules` service returned a `greynoise-ip` object. Open an attribute
+and select GreyNoise enrichment; CVE queries depend on your plan's permissions.
 
-La chiave è conservata in `.env` (permessi 0600) e nella configurazione
-persistente di MISP. Lo script aggiorna anche la copia della chiave in MISP,
-preservando lo stato abilitato/disabilitato del modulo. In una nuova
-installazione, abilitare l'arricchimento dalle impostazioni MISP se desiderato. Le impostazioni sono
-`Plugin.Enrichment_greynoise_enabled` e `Plugin.Enrichment_greynoise_api_key`,
-in **Server Settings & Maintenance → Plugin Settings → Enrichment**.
-La versione installata non usa il vecchio parametro `api_type`.
+The key is stored in `.env` with mode 0600 and in MISP's persistent configuration.
+The script also updates the copy of the key in MISP while preserving the module's
+enabled or disabled state. On a new installation, enable enrichment in MISP's
+settings if desired. The settings are `Plugin.Enrichment_greynoise_enabled`
+and `Plugin.Enrichment_greynoise_api_key`, under
+**Server Settings & Maintenance → Plugin Settings → Enrichment**.
+The installed version does not use the legacy `api_type` parameter.
 
-`integrations/GreyNoiseSetupShell.php` viene caricato temporaneamente nel
-container durante l'aggiornamento e rimosso al termine. La chiave passa via
-stdin; il salvataggio delle impostazioni registra un audit con valore oscurato.
-L'helper supporta la configurazione su file utilizzata da questo stack.
+`integrations/GreyNoiseSetupShell.php` is temporarily uploaded to the container
+during the update and removed afterward. The key is passed through stdin;
+saving the settings creates an audit entry with the value redacted.
+The helper supports the file-based configuration used by this stack.
 
-Riferimenti: [modulo ufficiale MISP](https://github.com/MISP/misp-modules/blob/main/misp_modules/modules/expansion/greynoise.py),
-[integrazione GreyNoise](https://docs.greynoise.io/docs/integration-overview-misp),
-[accesso ai feed](https://docs.greynoise.io/docs/using-greynoise-as-an-indicator-feed).
+References: [official MISP module](https://github.com/MISP/misp-modules/blob/main/misp_modules/modules/expansion/greynoise.py),
+[GreyNoise integration](https://docs.greynoise.io/docs/integration-overview-misp),
+[feed access](https://docs.greynoise.io/docs/using-greynoise-as-an-indicator-feed).
 
-La configurazione è destinata alla topologia ufficiale corrente:
-[Compose upstream](https://github.com/MISP/misp-docker/blob/master/docker-compose.yml).
-Gli healthcheck gestiscono l'ordine iniziale di avvio; lo stato della pagina
-di login va verificato dopo l'inizializzazione.
+This configuration targets the current official topology:
+[upstream Compose](https://github.com/MISP/misp-docker/blob/master/docker-compose.yml).
+Health checks manage the initial startup order. Verify the login page once
+initialization is complete.
